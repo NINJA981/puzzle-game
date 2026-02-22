@@ -9,6 +9,8 @@ const NAV_ITEMS = [
     { href: '/admin/codes', label: 'Team Codes', icon: '⊞' },
     { href: '/admin/puzzles', label: 'Puzzles', icon: '⧫' },
     { href: '/admin/live', label: 'Live Control', icon: '◉' },
+    { href: '/admin/tournament', label: 'Tournament', icon: '🏆' },
+    { href: '/admin/powerups', label: 'Powerups', icon: '⚡' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

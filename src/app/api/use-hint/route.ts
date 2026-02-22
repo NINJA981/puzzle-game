@@ -3,10 +3,15 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
     try {
-        const { team_id } = await request.json()
+        const { team_id, character_position, hint_level } = await request.json()
 
         if (!team_id) {
             return NextResponse.json({ error: 'Missing team_id' }, { status: 400 })
+        }
+
+        const level = hint_level || 1
+        if (level < 1 || level > 3) {
+            return NextResponse.json({ error: 'hint_level must be 1, 2, or 3' }, { status: 400 })
         }
 
         const supabase = createServiceClient()
@@ -40,27 +45,39 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No active puzzle' }, { status: 404 })
         }
 
-        // Get current clue
+        // Get clue for the specified position (or current index for backward compat)
+        const charPos = character_position !== undefined ? character_position : team.current_character_index
+
         const { data: clue } = await supabase
             .from('clues')
-            .select('hint_text')
+            .select('hint_text, hint_1, hint_2, hint_3')
             .eq('puzzle_id', puzzle.id)
-            .eq('character_position', team.current_character_index)
+            .eq('character_position', charPos)
             .single()
 
         if (!clue) {
             return NextResponse.json({ error: 'Clue not found' }, { status: 404 })
         }
 
-        // Deduct token
+        // Get the appropriate hint level
+        let hintText = ''
+        if (level === 1) hintText = clue.hint_1 || clue.hint_text || 'No hint available.'
+        else if (level === 2) hintText = clue.hint_2 || 'No level 2 hint available.'
+        else if (level === 3) hintText = clue.hint_3 || 'No level 3 hint available.'
+
+        // Deduct token and track usage
         await supabase
             .from('teams')
-            .update({ hint_tokens: team.hint_tokens - 1 })
+            .update({
+                hint_tokens: team.hint_tokens - 1,
+                hints_used_total: (team.hints_used_total || 0) + 1,
+            })
             .eq('id', team_id)
 
         return NextResponse.json({
             success: true,
-            hint_text: clue.hint_text || 'No hint available for this clue.',
+            hint_text: hintText,
+            hint_level: level,
             tokens_remaining: team.hint_tokens - 1,
         })
     } catch {

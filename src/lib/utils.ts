@@ -21,6 +21,26 @@ export function formatTime(seconds: number): string {
     return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+export function formatDuration(seconds: number): string {
+    if (seconds < 60) return `${seconds}s`
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return s > 0 ? `${m}m ${s}s` : `${m}m`
+}
+
+export function calculateScore(timeSeconds: number, hintsUsed: number): number {
+    if (timeSeconds <= 0) return 0
+
+    let hintMultiplier = 1.0
+    if (hintsUsed === 0) hintMultiplier = 1.5
+    else if (hintsUsed <= 2) hintMultiplier = 1.2
+    else if (hintsUsed <= 4) hintMultiplier = 1.0
+    else hintMultiplier = 0.8
+
+    const score = (1 / timeSeconds) * 10000 * hintMultiplier
+    return Math.round(score * 100) / 100
+}
+
 export function cn(...classes: (string | undefined | false)[]): string {
     return classes.filter(Boolean).join(' ')
 }

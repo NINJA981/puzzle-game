@@ -1,27 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { GameBroadcast } from '@/lib/types'
 
 export default function LobbyPage() {
     const [teamCount, setTeamCount] = useState(0)
-    const [teamId, setTeamId] = useState<string | null>(null)
+    const [connected, setConnected] = useState(false)
+    const [teamName, setTeamName] = useState('')
+    const supabaseRef = useRef(createClient())
     const router = useRouter()
-    const supabase = createClient()
 
     useEffect(() => {
         const id = localStorage.getItem('team_id')
-        if (!id) {
-            router.push('/')
-            return
-        }
-        setTeamId(id)
+        if (!id) { router.push('/'); return }
 
-        const channel = supabase.channel('game_state', {
-            config: { presence: { key: id } },
-        })
+        const name = localStorage.getItem('team_name')
+        setTeamName(name || '')
+
+        const supabase = supabaseRef.current
+        const channel = supabase.channel('game_state')
 
         channel
             .on('presence', { event: 'sync' }, () => {
@@ -29,109 +28,114 @@ export default function LobbyPage() {
                 setTeamCount(Object.keys(state).length)
             })
             .on('broadcast', { event: 'game_event' }, ({ payload }: { payload: GameBroadcast }) => {
-                const broadcast = payload
-                if (broadcast.type === 'GAME_START') {
-                    router.push('/play')
+                if (payload.type === 'GAME_START') {
+                    router.push('/draft')
+                }
+                if (payload.type === 'GAME_END') {
+                    router.push('/leaderboard')
+                }
+                if (payload.type === 'ROUND_ADVANCE') {
+                    router.push('/draft')
                 }
             })
             .subscribe(async (status: string) => {
                 if (status === 'SUBSCRIBED') {
-                    await channel.track({ team_id: id, joined_at: new Date().toISOString() })
+                    setConnected(true)
+                    await channel.track({
+                        team_id: id,
+                        joined_at: new Date().toISOString(),
+                    })
                 }
             })
 
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [router, supabase])
+        return () => { supabase.removeChannel(channel) }
+    }, [router])
 
     return (
-        <main className="page-container" style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <div className="text-center animate-fade-in-up" style={{ width: '100%', maxWidth: 400 }}>
-                {/* Pulsing Ring */}
-                <div className="flex-center mb-6">
-                    <div
-                        className="animate-pulse"
-                        style={{
-                            width: 120,
-                            height: 120,
-                            borderRadius: '50%',
-                            border: '2px solid var(--neon-primary)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: 'var(--glow-md), inset var(--glow-sm)',
-                        }}
-                    >
-                        <div
-                            style={{
-                                width: 80,
-                                height: 80,
-                                borderRadius: '50%',
-                                border: '1px solid var(--border-glow)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexDirection: 'column',
-                            }}
-                        >
-                            <span
-                                className="text-neon glow-text"
-                                style={{ fontSize: 'var(--font-2xl)', fontWeight: 700, lineHeight: 1 }}
-                            >
-                                {teamCount}
-                            </span>
-                            <span
-                                className="text-muted text-mono"
-                                style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}
-                            >
-                                teams
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Status */}
+        <main className="page-container flex-center" style={{ textAlign: 'center' }}>
+            <div className="animate-fade-in-up">
                 <h1
-                    className="text-mono"
+                    className="glow-text"
                     style={{
-                        fontSize: 'var(--font-lg)',
-                        fontWeight: 600,
-                        color: 'var(--neon-secondary)',
+                        fontSize: 'var(--font-3xl)',
+                        fontWeight: 700,
                         marginBottom: 'var(--space-2)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.1em',
                     }}
                 >
-                    Waiting for Admin...
+                    DECODE
                 </h1>
-
                 <p
-                    className="text-muted"
-                    style={{ fontSize: 'var(--font-sm)', maxWidth: 280, margin: '0 auto', lineHeight: 1.6 }}
+                    className="text-mono text-muted"
+                    style={{ fontSize: 'var(--font-sm)', marginBottom: 'var(--space-6)' }}
                 >
-                    The game will start when the administrator launches the round. Stay on this screen.
+                    ENTER YOUR TEAM ACCESS CODE
                 </p>
 
-                {/* Connection indicator */}
                 <div
-                    className="flex-center gap-2 mt-auto"
-                    style={{ marginTop: 'var(--space-7)' }}
+                    className="card card-glow"
+                    style={{
+                        padding: 'var(--space-6)',
+                        maxWidth: 400,
+                        margin: '0 auto',
+                        marginBottom: 'var(--space-5)',
+                    }}
+                >
+                    <div
+                        className="text-mono"
+                        style={{
+                            fontSize: 'var(--font-3xl)',
+                            fontWeight: 700,
+                            color: 'var(--neon-primary)',
+                            marginBottom: 'var(--space-2)',
+                        }}
+                    >
+                        {teamCount}
+                    </div>
+                    <p className="text-mono text-muted" style={{ fontSize: 'var(--font-sm)' }}>
+                        TEAMS CONNECTED
+                    </p>
+                </div>
+
+                <div
+                    className="animate-pulse"
+                    style={{
+                        marginBottom: 'var(--space-4)',
+                        fontSize: 'var(--font-lg)',
+                        fontFamily: 'var(--font-mono)',
+                    }}
+                >
+                    WAITING FOR ADMIN...
+                </div>
+
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 'var(--space-2)',
+                    }}
                 >
                     <div
                         style={{
                             width: 8,
                             height: 8,
                             borderRadius: '50%',
-                            background: 'var(--neon-success)',
-                            boxShadow: '0 0 6px var(--neon-success)',
-                            animation: 'neonPulse 2s ease-in-out infinite',
+                            background: connected ? 'var(--neon-success)' : 'var(--neon-danger)',
                         }}
                     />
-                    <span className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)' }}>
-                        CONNECTED
+                    <span
+                        className="text-mono text-muted"
+                        style={{ fontSize: 'var(--font-xs)' }}
+                    >
+                        {connected ? 'CONNECTED' : 'CONNECTING...'}
                     </span>
                 </div>
+
+                {teamName && (
+                    <p className="text-muted" style={{ marginTop: 'var(--space-4)', fontSize: 'var(--font-xs)' }}>
+                        {teamName}
+                    </p>
+                )}
             </div>
         </main>
     )
