@@ -1,0 +1,113 @@
+.adminWrapper {
+    display: flex;
+    min-height: 100dvh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 240px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-dim);
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-4);
+    flex-shrink: 0;
+}
+
+.sidebarHeader {
+    padding-bottom: var(--space-5);
+    border-bottom: 1px solid var(--border-dim);
+    margin-bottom: var(--space-4);
+}
+
+.sidebarNav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.navItem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.navItem:hover {
+    color: var(--neon-primary);
+    border-color: var(--border-glow);
+    background: rgba(0, 255, 170, 0.03);
+}
+
+.navItemActive {
+    color: var(--neon-primary);
+    border-color: var(--neon-primary);
+    background: rgba(0, 255, 170, 0.05);
+    box-shadow: var(--glow-sm);
+}
+
+.navIcon {
+    font-size: var(--font-base);
+    width: 20px;
+    text-align: center;
+}
+
+.sidebarFooter {
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-dim);
+}
+
+/* Main Content */
+.mainContent {
+    flex: 1;
+    padding: var(--space-6);
+    overflow-y: auto;
+    max-height: 100dvh;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .adminWrapper {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        padding: var(--space-3);
+        gap: var(--space-3);
+        overflow-x: auto;
+    }
+
+    .sidebarHeader {
+        display: none;
+    }
+
+    .sidebarNav {
+        flex-direction: row;
+        gap: var(--space-1);
+    }
+
+    .navItem {
+        white-space: nowrap;
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--font-xs);
+    }
+
+    .sidebarFooter {
+        display: none;
+    }
+
+    .mainContent {
+        padding: var(--space-4);
+        max-height: none;
+    }
+}
