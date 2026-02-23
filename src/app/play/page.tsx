@@ -5,6 +5,15 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Clue, GameBroadcast } from '@/lib/types'
 
+interface TeamPowerupUI {
+    id: string
+    powerup_id: string
+    is_used: boolean
+    name: string
+    icon: string
+    description: string
+}
+
 interface CharProgress {
     position: number
     letter: string
@@ -32,6 +41,8 @@ export default function PlayPage() {
     const [gameEnded, setGameEnded] = useState(false)
     const [imageUrl, setImageUrl] = useState('')
     const [hintsUsedTotal, setHintsUsedTotal] = useState(0)
+    const [powerups, setPowerups] = useState<TeamPowerupUI[]>([])
+    const [powerupFeedback, setPowerupFeedback] = useState('')
     const supabaseRef = useRef(createClient())
     const router = useRouter()
 
@@ -109,6 +120,25 @@ export default function PlayPage() {
 
         if (clues[activeCharIndex]?.image_url) {
             setImageUrl(clues[activeCharIndex].image_url)
+        }
+
+        // Load team powerups
+        const { data: teamPowerups } = await supabase
+            .from('team_powerups')
+            .select('*, powerup:powerups(*)')
+            .eq('team_id', id)
+
+        if (teamPowerups) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mapped = teamPowerups.map((tp: any) => ({
+                id: tp.id,
+                powerup_id: tp.powerup_id,
+                is_used: tp.is_used,
+                name: tp.powerup?.name || 'Unknown',
+                icon: tp.powerup?.icon || '⚡',
+                description: tp.powerup?.description || '',
+            }))
+            setPowerups(mapped)
         }
 
         setLoading(false)
@@ -372,6 +402,13 @@ export default function PlayPage() {
                     <p className="text-muted text-mono" style={{ fontSize: 'var(--font-xs)', marginTop: 'var(--space-2)' }}>
                         Hints used: {hintsUsedTotal} • Waiting for results...
                     </p>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => router.push('/leaderboard')}
+                        style={{ marginTop: 'var(--space-4)' }}
+                    >
+                        📊 VIEW LEADERBOARD
+                    </button>
                 </div>
             )}
 
@@ -499,6 +536,62 @@ export default function PlayPage() {
                                 {submitting ? '...' : 'SUBMIT →'}
                             </button>
                         </div>
+                    )}
+                </div>
+            )}
+
+            {/* Powerup Toolbar */}
+            {powerups.length > 0 && !allCompleted && (
+                <div style={{ marginTop: 'var(--space-4)' }}>
+                    <p className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)', marginBottom: 'var(--space-2)' }}>POWERUPS</p>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                        {powerups.map((p) => (
+                            <button
+                                key={p.id}
+                                className="card"
+                                disabled={p.is_used}
+                                onClick={async () => {
+                                    if (p.is_used || !teamId) return
+                                    const res = await fetch('/api/powerups/use', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ team_id: teamId, powerup_id: p.powerup_id }),
+                                    })
+                                    const data = await res.json()
+                                    if (res.ok) {
+                                        setPowerups((prev) => prev.map((pp) => pp.id === p.id ? { ...pp, is_used: true } : pp))
+                                        setPowerupFeedback(`${p.icon} ${data.message || p.name + ' activated!'}`)
+                                        setTimeout(() => setPowerupFeedback(''), 3000)
+                                        loadGameState()
+                                    } else {
+                                        setPowerupFeedback(data.error || 'Failed')
+                                        setTimeout(() => setPowerupFeedback(''), 3000)
+                                    }
+                                }}
+                                style={{
+                                    padding: 'var(--space-2) var(--space-3)',
+                                    cursor: p.is_used ? 'not-allowed' : 'pointer',
+                                    opacity: p.is_used ? 0.35 : 1,
+                                    border: p.is_used ? '1px solid var(--border-dim)' : '1px solid var(--neon-warning)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 'var(--space-2)',
+                                    fontSize: 'var(--font-sm)',
+                                    textDecoration: p.is_used ? 'line-through' : 'none',
+                                    transition: 'all 0.2s ease',
+                                }}
+                                title={p.description}
+                            >
+                                <span style={{ fontSize: '1.2rem' }}>{p.icon}</span>
+                                <span className="text-mono">{p.name}</span>
+                                {p.is_used && <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>USED</span>}
+                            </button>
+                        ))}
+                    </div>
+                    {powerupFeedback && (
+                        <p className="text-mono animate-fade-in-up" style={{ fontSize: 'var(--font-xs)', color: 'var(--neon-warning)', marginTop: 'var(--space-2)' }}>
+                            {powerupFeedback}
+                        </p>
                     )}
                 </div>
             )}

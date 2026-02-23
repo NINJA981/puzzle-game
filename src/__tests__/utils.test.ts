@@ -117,6 +117,26 @@ describe('Utils', () => {
             const manyHints = calculateScore(100, 5)
             expect(noHints).toBeGreaterThan(manyHints)
         })
+
+        it('should reduce score by 10% per powerup used', () => {
+            const noPowerups = calculateScore(100, 0, 0)
+            const onePowerup = calculateScore(100, 0, 1)
+            const twoPowerups = calculateScore(100, 0, 2)
+            expect(noPowerups).toBeGreaterThan(onePowerup)
+            expect(onePowerup).toBeGreaterThan(twoPowerups)
+        })
+
+        it('should cap powerup penalty at 0.5x', () => {
+            const maxPenalty = calculateScore(100, 0, 10)
+            const expected = Math.round(((1 / 100) * 10000 * 1.5 * 0.5) * 100) / 100
+            expect(maxPenalty).toBe(expected)
+        })
+
+        it('should stack hint and powerup penalties', () => {
+            const clean = calculateScore(100, 0, 0)   // 1.5 * 1.0
+            const dirty = calculateScore(100, 5, 3)    // 0.8 * 0.7
+            expect(clean).toBeGreaterThan(dirty)
+        })
     })
 
     describe('cn', () => {

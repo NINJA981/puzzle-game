@@ -28,7 +28,7 @@ export function formatDuration(seconds: number): string {
     return s > 0 ? `${m}m ${s}s` : `${m}m`
 }
 
-export function calculateScore(timeSeconds: number, hintsUsed: number): number {
+export function calculateScore(timeSeconds: number, hintsUsed: number, powerupsUsed: number = 0): number {
     if (timeSeconds <= 0) return 0
 
     let hintMultiplier = 1.0
@@ -37,7 +37,10 @@ export function calculateScore(timeSeconds: number, hintsUsed: number): number {
     else if (hintsUsed <= 4) hintMultiplier = 1.0
     else hintMultiplier = 0.8
 
-    const score = (1 / timeSeconds) * 10000 * hintMultiplier
+    // Powerup penalty: each powerup used reduces score by 10%
+    const powerupMultiplier = Math.max(0.5, 1.0 - (powerupsUsed * 0.1))
+
+    const score = (1 / timeSeconds) * 10000 * hintMultiplier * powerupMultiplier
     return Math.round(score * 100) / 100
 }
 

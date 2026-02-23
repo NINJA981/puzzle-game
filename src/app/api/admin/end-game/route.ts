@@ -31,6 +31,18 @@ export async function POST() {
             .eq('status', 'ACTIVE')
 
         if (teams) {
+            // Count powerups used per team
+            const { data: usedPowerups } = await supabase
+                .from('team_powerups')
+                .select('team_id')
+                .eq('is_used', true)
+                .eq('puzzle_id', puzzle.id)
+
+            const powerupCounts = new Map<string, number>()
+            usedPowerups?.forEach((tp) => {
+                powerupCounts.set(tp.team_id, (powerupCounts.get(tp.team_id) || 0) + 1)
+            })
+
             const leaderboardRows = teams.map((team) => {
                 const isCompleted = !!team.completed_at
                 const startTime = team.round_start_time ? new Date(team.round_start_time).getTime() : 0
@@ -38,13 +50,14 @@ export async function POST() {
                     ? new Date(team.completed_at).getTime()
                     : Date.now()
                 const timeSeconds = startTime > 0 ? Math.floor((endTime - startTime) / 1000) : 9999
+                const powerupsUsed = powerupCounts.get(team.id) || 0
 
                 return {
                     team_id: team.id,
                     puzzle_id: puzzle.id,
                     time_seconds: timeSeconds,
                     hints_used: team.hints_used_total || 0,
-                    score: isCompleted ? calculateScore(timeSeconds, team.hints_used_total || 0) : 0,
+                    score: isCompleted ? calculateScore(timeSeconds, team.hints_used_total || 0, powerupsUsed) : 0,
                     completed: isCompleted,
                 }
             })
