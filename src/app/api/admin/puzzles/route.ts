@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
     try {
-        const { round_number, round_name, master_password, clues } = await request.json()
+        const { round_number, round_name, master_password, clues, max_powerups, max_hints } = await request.json()
 
         if (!round_name || !master_password || !clues || clues.length === 0) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -20,6 +20,8 @@ export async function POST(request: NextRequest) {
                 master_password: master_password.toUpperCase(),
                 is_live: false,
                 is_active: false,
+                max_powerups: max_powerups ?? 3,
+                max_hints: max_hints ?? 3,
             })
             .select()
             .single()

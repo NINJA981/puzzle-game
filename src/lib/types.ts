@@ -28,6 +28,8 @@ export interface Puzzle {
     is_live: boolean
     is_active: boolean
     time_limit_seconds: number
+    max_powerups: number
+    max_hints: number
     session_id: string | null
     created_at: string
 }

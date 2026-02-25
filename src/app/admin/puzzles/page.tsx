@@ -21,6 +21,8 @@ interface PuzzleData {
     master_password: string
     is_active: boolean
     is_live: boolean
+    max_powerups: number
+    max_hints: number
     clues?: ClueInput[]
 }
 
@@ -30,6 +32,8 @@ export default function PuzzlesPage() {
     const [roundName, setRoundName] = useState('')
     const [masterPassword, setMasterPassword] = useState('')
     const [clues, setClues] = useState<ClueInput[]>([])
+    const [maxPowerups, setMaxPowerups] = useState('3')
+    const [maxHints, setMaxHints] = useState('3')
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState('')
 
@@ -79,6 +83,8 @@ export default function PuzzlesPage() {
                     round_number: parseInt(roundNumber),
                     round_name: roundName,
                     master_password: masterPassword.toUpperCase(),
+                    max_powerups: parseInt(maxPowerups) || 3,
+                    max_hints: parseInt(maxHints) || 3,
                     clues: clues.map((c) => ({
                         ...c,
                         expected_answer: c.expected_answer.toUpperCase(),
@@ -90,6 +96,8 @@ export default function PuzzlesPage() {
                 setRoundName('')
                 setMasterPassword('')
                 setClues([])
+                setMaxPowerups('3')
+                setMaxHints('3')
                 fetchPuzzles()
             } else {
                 const data = await res.json()
@@ -150,6 +158,24 @@ export default function PuzzlesPage() {
                             Master Password *
                         </label>
                         <input type="text" className="input" placeholder="SECRET" value={masterPassword} onChange={(e) => setMasterPassword(e.target.value)} style={{ textTransform: 'uppercase' }} />
+                    </div>
+                </div>
+
+                {/* Per-round limits */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+                    <div>
+                        <label className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>
+                            ⚡ Max Powerups per Team
+                        </label>
+                        <input type="number" className="input" value={maxPowerups} onChange={(e) => setMaxPowerups(e.target.value)} min="0" max="10" />
+                        <span className="text-mono text-muted" style={{ fontSize: '0.6rem' }}>Set to 0 to disable powerups</span>
+                    </div>
+                    <div>
+                        <label className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>
+                            💡 Max Hints per Round
+                        </label>
+                        <input type="number" className="input" value={maxHints} onChange={(e) => setMaxHints(e.target.value)} min="0" max="20" />
+                        <span className="text-mono text-muted" style={{ fontSize: '0.6rem' }}>Set to 0 to disable hints</span>
                     </div>
                 </div>
 
@@ -246,7 +272,7 @@ export default function PuzzlesPage() {
                             {puzzle.is_live && <span className="badge badge-warning" style={{ fontSize: 'var(--font-xs)' }}>LIVE</span>}
                         </div>
                         <p className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)' }}>
-                            Round #{puzzle.round_number} • {puzzle.master_password.length} letters • {puzzle.clues?.length || 0} clues
+                            Round #{puzzle.round_number} • {puzzle.master_password.length} letters • {puzzle.clues?.length || 0} clues • ⚡{puzzle.max_powerups ?? 3} / 💡{puzzle.max_hints ?? 3}
                         </p>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>

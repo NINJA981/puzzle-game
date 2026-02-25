@@ -12,6 +12,7 @@ export default function LiveControlPage() {
     const [actionFeedback, setActionFeedback] = useState('')
     const [loading, setLoading] = useState(true)
     const [confirmAction, setConfirmAction] = useState<string | null>(null)
+    const [powerupsEnabled, setPowerupsEnabled] = useState(true)
     const supabaseRef = useRef(createClient())
     const supabase = supabaseRef.current
 
@@ -38,7 +39,9 @@ export default function LiveControlPage() {
         const { data } = await supabase.from('puzzles').select('*').order('round_number', { ascending: true })
         if (data) {
             setPuzzles(data as Puzzle[])
-            setActivePuzzle((data as Puzzle[]).find((p) => p.is_active) || null)
+            const active = (data as Puzzle[]).find((p) => p.is_active) || null
+            setActivePuzzle(active)
+            setPowerupsEnabled(active ? (active.max_powerups ?? 3) > 0 : true)
         }
     }
 
@@ -104,6 +107,20 @@ export default function LiveControlPage() {
             const data = await res.json()
             showFeedback(`+${data.tokens_added} hints to ${data.teams_updated} teams.`)
             fetchTeams()
+        }
+    }
+
+    async function handleTogglePowerups() {
+        const newState = !powerupsEnabled
+        const res = await fetch('/api/admin/toggle-powerups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: newState }),
+        })
+        if (res.ok) {
+            setPowerupsEnabled(newState)
+            showFeedback(newState ? '⚡ Powerups ENABLED for this round' : '🚫 Powerups DISABLED for this round')
+            fetchPuzzles()
         }
     }
 
@@ -187,7 +204,7 @@ export default function LiveControlPage() {
             </div>
 
             {/* Quick Actions */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
                 {/* Grant Hints */}
                 <div className="card" style={{ padding: 'var(--space-4)' }}>
                     <h3 className="text-mono" style={{ fontSize: 'var(--font-sm)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>
@@ -209,6 +226,24 @@ export default function LiveControlPage() {
                     </p>
                     <button className="btn btn-secondary btn-sm" onClick={handleGrantExtraLife} disabled={eliminatedTeams.length === 0}>
                         REVIVE ALL
+                    </button>
+                </div>
+
+                {/* Powerups Toggle */}
+                <div className="card" style={{ padding: 'var(--space-4)', border: powerupsEnabled ? '1px solid var(--neon-warning)' : '1px solid var(--border-dim)' }}>
+                    <h3 className="text-mono" style={{ fontSize: 'var(--font-sm)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>
+                        ⚡ Powerups
+                    </h3>
+                    <p className="text-muted" style={{ fontSize: 'var(--font-xs)', marginBottom: 'var(--space-2)' }}>
+                        {powerupsEnabled ? 'Teams can draft & use powerups' : 'Powerups are OFF for this round'}
+                    </p>
+                    <button
+                        className={`btn ${powerupsEnabled ? 'btn-danger' : 'btn-secondary'} btn-sm`}
+                        onClick={handleTogglePowerups}
+                        disabled={!activePuzzle}
+                        style={{ width: '100%' }}
+                    >
+                        {powerupsEnabled ? '🚫 DISABLE' : '⚡ ENABLE'}
                     </button>
                 </div>
             </div>

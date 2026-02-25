@@ -11,12 +11,24 @@ export async function POST(request: NextRequest) {
 
         const supabase = createServiceClient()
 
-        // Find the team powerup
+        // Get active puzzle to scope powerups to current round
+        const { data: puzzle } = await supabase
+            .from('puzzles')
+            .select('id')
+            .eq('is_active', true)
+            .single()
+
+        if (!puzzle) {
+            return NextResponse.json({ error: 'No active puzzle' }, { status: 404 })
+        }
+
+        // Find the team powerup scoped to current puzzle
         const { data: tp, error: tpError } = await supabase
             .from('team_powerups')
             .select('*, powerup:powerups(*)')
             .eq('team_id', team_id)
             .eq('powerup_id', powerup_id)
+            .eq('puzzle_id', puzzle.id)
             .eq('is_used', false)
             .single()
 

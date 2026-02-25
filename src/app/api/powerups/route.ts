@@ -4,6 +4,14 @@ import { createServiceClient } from '@/lib/supabase/server'
 export async function GET() {
     try {
         const supabase = createServiceClient()
+
+        // Get active puzzle config
+        const { data: puzzle } = await supabase
+            .from('puzzles')
+            .select('id, max_powerups')
+            .eq('is_active', true)
+            .single()
+
         const { data, error } = await supabase
             .from('powerups')
             .select('*')
@@ -11,7 +19,10 @@ export async function GET() {
             .order('name', { ascending: true })
 
         if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-        return NextResponse.json({ powerups: data })
+        return NextResponse.json({
+            powerups: data,
+            max_powerups: puzzle?.max_powerups ?? 3,
+        })
     } catch {
         return NextResponse.json({ error: 'Server error' }, { status: 500 })
     }
@@ -29,17 +40,28 @@ export async function POST(request: NextRequest) {
 
         // Get active puzzle if not provided
         let activePuzzleId = puzzle_id
-        if (!activePuzzleId) {
-            const { data: puzzle } = await supabase
-                .from('puzzles')
-                .select('id')
-                .eq('is_active', true)
-                .single()
-            activePuzzleId = puzzle?.id
+        let maxPowerups = 3
+        const { data: puzzle } = await supabase
+            .from('puzzles')
+            .select('id, max_powerups')
+            .eq('is_active', true)
+            .single()
+
+        if (puzzle) {
+            if (!activePuzzleId) activePuzzleId = puzzle.id
+            maxPowerups = puzzle.max_powerups ?? 3
         }
 
         if (!activePuzzleId) {
             return NextResponse.json({ error: 'No active puzzle' }, { status: 404 })
+        }
+
+        // Enforce per-round powerup limit
+        if (powerup_ids.length > maxPowerups) {
+            return NextResponse.json(
+                { error: `Cannot select more than ${maxPowerups} powerups for this round` },
+                { status: 400 }
+            )
         }
 
         // Check if team already selected powerups for this puzzle

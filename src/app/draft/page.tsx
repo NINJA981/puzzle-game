@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Powerup } from '@/lib/types'
 
-const MAX_PICKS = 3
-
 export default function DraftPage() {
     const [powerups, setPowerups] = useState<Powerup[]>([])
+    const [maxPicks, setMaxPicks] = useState(3)
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
@@ -22,6 +21,7 @@ export default function DraftPage() {
             .then((res) => res.json())
             .then((data) => {
                 if (data.powerups) setPowerups(data.powerups)
+                if (data.max_powerups !== undefined) setMaxPicks(data.max_powerups)
                 setLoading(false)
             })
     }, [router])
@@ -31,7 +31,7 @@ export default function DraftPage() {
         if (next.has(id)) {
             next.delete(id)
         } else {
-            if (next.size >= MAX_PICKS) return
+            if (next.size >= maxPicks) return
             next.add(id)
         }
         setSelected(next)
@@ -70,6 +70,25 @@ export default function DraftPage() {
         )
     }
 
+    if (maxPicks === 0) {
+        return (
+            <main className="page-container flex-center" style={{ textAlign: 'center' }}>
+                <div className="animate-fade-in-up">
+                    <div style={{ fontSize: '3rem', marginBottom: 'var(--space-3)' }}>🚫</div>
+                    <h1 className="glow-text" style={{ fontSize: 'var(--font-2xl)', marginBottom: 'var(--space-3)' }}>
+                        POWERUPS DISABLED
+                    </h1>
+                    <p className="text-mono text-muted" style={{ fontSize: 'var(--font-sm)', marginBottom: 'var(--space-5)' }}>
+                        The admin has disabled powerups for this round.
+                    </p>
+                    <button className="btn btn-primary" onClick={() => router.push('/play')} style={{ fontSize: 'var(--font-lg)', padding: 'var(--space-3) var(--space-5)' }}>
+                        PROCEED TO PLAY →
+                    </button>
+                </div>
+            </main>
+        )
+    }
+
     return (
         <main className="page-container" style={{ maxWidth: 760, margin: '0 auto', padding: 'var(--space-5) var(--space-4)' }}>
             {/* Header */}
@@ -83,7 +102,7 @@ export default function DraftPage() {
 
                 {/* Selection Slots */}
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
-                    {Array.from({ length: MAX_PICKS }).map((_, i) => {
+                    {Array.from({ length: maxPicks }).map((_, i) => {
                         const selectedArr = Array.from(selected)
                         const picked = powerups.find((p) => p.id === selectedArr[i])
                         return (
@@ -108,8 +127,8 @@ export default function DraftPage() {
                         )
                     })}
                 </div>
-                <p className="text-mono" style={{ fontSize: 'var(--font-xs)', color: selected.size === MAX_PICKS ? 'var(--neon-success)' : 'rgba(255,255,255,0.4)' }}>
-                    {selected.size} / {MAX_PICKS} selected
+                <p className="text-mono" style={{ fontSize: 'var(--font-xs)', color: selected.size === maxPicks ? 'var(--neon-success)' : 'rgba(255,255,255,0.4)' }}>
+                    {selected.size} / {maxPicks} selected
                 </p>
             </div>
 
@@ -117,7 +136,7 @@ export default function DraftPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
                 {powerups.map((p) => {
                     const isSelected = selected.has(p.id)
-                    const isDisabled = !isSelected && selected.size >= MAX_PICKS
+                    const isDisabled = !isSelected && selected.size >= maxPicks
                     return (
                         <button
                             key={p.id}

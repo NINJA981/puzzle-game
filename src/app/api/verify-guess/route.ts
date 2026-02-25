@@ -117,13 +117,23 @@ export async function POST(request: NextRequest) {
                 .eq('completed', true)
 
             const totalChars = allClues?.length || 0
-            const completedChars = (completedProgress?.length || 0)
+
+            // Build completed set and ensure the current clue is included
+            // (the query above may not reflect the just-committed update)
+            const completedSet = new Set(completedProgress?.map((p) => p.clue_id) || [])
+            completedSet.add(clue.id)
+            const completedChars = completedSet.size
             const allDone = completedChars >= totalChars
 
             // Update current_character_index to reflect progress
+            const updatePayload: any = { current_character_index: completedChars }
+            if (allDone) {
+                updatePayload.completed_at = new Date().toISOString()
+            }
+
             await supabase
                 .from('teams')
-                .update({ current_character_index: completedChars })
+                .update(updatePayload)
                 .eq('id', team_id)
 
             return NextResponse.json({
@@ -139,13 +149,16 @@ export async function POST(request: NextRequest) {
         const triesRemaining = clue.max_tries - newTriesUsed
 
         if (triesRemaining <= 0) {
-            // Check if team has anti-eliminate powerup
+            // Check if team has an unused anti_eliminate powerup for this puzzle
             const { data: antiElim } = await supabase
                 .from('team_powerups')
-                .select('id')
+                .select('id, powerup:powerups!inner(slug)')
                 .eq('team_id', team_id)
+                .eq('puzzle_id', puzzle.id)
                 .eq('is_used', false)
-                .single()
+                .eq('powerups.slug', 'anti_eliminate')
+                .limit(1)
+                .maybeSingle()
 
             // Lock out with duration
             const lockUntil = new Date(
@@ -157,25 +170,32 @@ export async function POST(request: NextRequest) {
                 .update({ tries_used: newTriesUsed, locked_until: lockUntil })
                 .eq('id', progress.id)
 
-            // ELIMINATE the team — they've exhausted all tries on this character
-            if (!antiElim) {
+            if (antiElim) {
+                // Auto-consume the anti-eliminate powerup
                 await supabase
-                    .from('teams')
-                    .update({ is_eliminated: true, eliminated_at: new Date().toISOString() })
-                    .eq('id', team_id)
+                    .from('team_powerups')
+                    .update({ is_used: true, used_at: new Date().toISOString() })
+                    .eq('id', antiElim.id)
 
                 return NextResponse.json({
                     success: false,
                     tries_remaining: 0,
                     locked_until: lockUntil,
-                    is_eliminated: true,
+                    anti_eliminate_used: true,
                 })
             }
+
+            // ELIMINATE the team — they've exhausted all tries on this character
+            await supabase
+                .from('teams')
+                .update({ is_eliminated: true, eliminated_at: new Date().toISOString() })
+                .eq('id', team_id)
 
             return NextResponse.json({
                 success: false,
                 tries_remaining: 0,
                 locked_until: lockUntil,
+                is_eliminated: true,
             })
         }
 

@@ -12,6 +12,7 @@ interface TeamPowerupUI {
     name: string
     icon: string
     description: string
+    slug: string
 }
 
 interface CharProgress {
@@ -41,8 +42,10 @@ export default function PlayPage() {
     const [gameEnded, setGameEnded] = useState(false)
     const [imageUrl, setImageUrl] = useState('')
     const [hintsUsedTotal, setHintsUsedTotal] = useState(0)
+    const [maxHints, setMaxHints] = useState(3)
     const [powerups, setPowerups] = useState<TeamPowerupUI[]>([])
     const [powerupFeedback, setPowerupFeedback] = useState('')
+    const [powerupsEnabled, setPowerupsEnabled] = useState(true)
     const supabaseRef = useRef(createClient())
     const router = useRouter()
 
@@ -79,6 +82,8 @@ export default function PlayPage() {
 
         if (!puzzle) { setLoading(false); return }
         setRoundName(puzzle.round_name)
+        setMaxHints(puzzle.max_hints ?? 3)
+        setPowerupsEnabled((puzzle.max_powerups ?? 3) > 0)
 
         // Get all clues for this puzzle
         const { data: clues } = await supabase
@@ -118,15 +123,17 @@ export default function PlayPage() {
         const firstIncomplete = chars.findIndex((c) => !c.completed)
         if (firstIncomplete >= 0) setActiveCharIndex(firstIncomplete)
 
-        if (clues[activeCharIndex]?.image_url) {
-            setImageUrl(clues[activeCharIndex].image_url)
+        const currentIdx = firstIncomplete >= 0 ? firstIncomplete : 0
+        if (clues[currentIdx]?.image_url) {
+            setImageUrl(clues[currentIdx].image_url)
         }
 
-        // Load team powerups
+        // Load team powerups for this puzzle
         const { data: teamPowerups } = await supabase
             .from('team_powerups')
             .select('*, powerup:powerups(*)')
             .eq('team_id', id)
+            .eq('puzzle_id', puzzle.id)
 
         if (teamPowerups) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,12 +144,13 @@ export default function PlayPage() {
                 name: tp.powerup?.name || 'Unknown',
                 icon: tp.powerup?.icon || '⚡',
                 description: tp.powerup?.description || '',
+                slug: tp.powerup?.slug || '',
             }))
             setPowerups(mapped)
         }
 
         setLoading(false)
-    }, [router, activeCharIndex])
+    }, [router])
 
     useEffect(() => {
         loadGameState()
@@ -188,6 +196,15 @@ export default function PlayPage() {
                 setIsEliminated(true)
                 setFeedback('ELIMINATED — All tries exhausted!')
                 setFeedbackType('error')
+                return
+            }
+
+            if (data.anti_eliminate_used) {
+                setFeedback('🛡️ Anti-Eliminate shield saved you! Locked out temporarily.')
+                setFeedbackType('warning')
+                // Refresh powerups to show it as used
+                loadGameState()
+                setGuess('')
                 return
             }
 
@@ -239,6 +256,13 @@ export default function PlayPage() {
     async function handleUseHint(level: number) {
         if (!teamId || hintTokens <= 0) return
 
+        // Client-side check for per-round limit
+        if (hintsUsedTotal >= maxHints) {
+            setFeedback(`Hint limit reached for this round (${maxHints} max)`)
+            setFeedbackType('error')
+            return
+        }
+
         try {
             const res = await fetch('/api/use-hint', {
                 method: 'POST',
@@ -259,7 +283,7 @@ export default function PlayPage() {
                 }
                 setCharacters(updated)
                 setHintTokens(data.tokens_remaining)
-                setHintsUsedTotal((prev) => prev + 1)
+                setHintsUsedTotal(data.hints_used_this_round ?? (hintsUsedTotal + 1))
                 setFeedback(`💡 Hint ${level}: ${data.hint_text}`)
                 setFeedbackType('warning')
             } else {
@@ -269,6 +293,30 @@ export default function PlayPage() {
         } catch {
             setFeedback('Connection error')
             setFeedbackType('error')
+        }
+    }
+
+    async function handleUsePowerup(p: TeamPowerupUI) {
+        if (p.is_used || !teamId) return
+        try {
+            const res = await fetch('/api/powerups/use', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ team_id: teamId, powerup_id: p.powerup_id }),
+            })
+            const data = await res.json()
+            if (res.ok) {
+                setPowerups((prev) => prev.map((pp) => pp.id === p.id ? { ...pp, is_used: true } : pp))
+                setPowerupFeedback(`${p.icon} ${data.message || p.name + ' activated!'}`)
+                setTimeout(() => setPowerupFeedback(''), 3000)
+                loadGameState()
+            } else {
+                setPowerupFeedback(data.error || 'Failed')
+                setTimeout(() => setPowerupFeedback(''), 3000)
+            }
+        } catch {
+            setPowerupFeedback('Connection error')
+            setTimeout(() => setPowerupFeedback(''), 3000)
         }
     }
 
@@ -330,6 +378,8 @@ export default function PlayPage() {
     const completedCount = characters.filter((c) => c.completed).length
     const allCompleted = completedCount === characters.length
     const triesRemaining = currentChar ? currentChar.triesMax - currentChar.triesUsed : 0
+    const hintsRemaining = maxHints - hintsUsedTotal
+    const hintsDisabled = hintsRemaining <= 0
 
     return (
         <main className="page-container" style={{ maxWidth: 700, margin: '0 auto' }}>
@@ -503,26 +553,34 @@ export default function PlayPage() {
 
                     {/* Action buttons */}
                     {!currentChar.completed && (
-                        <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+                        <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)', alignItems: 'center' }}>
                             {/* Hint buttons */}
-                            <div style={{ display: 'flex', gap: 'var(--space-1)', flex: 1 }}>
+                            <div style={{ display: 'flex', gap: 'var(--space-1)', flex: 1, alignItems: 'center' }}>
                                 {[1, 2, 3].map((level) => (
                                     <button
                                         key={level}
                                         className="btn btn-ghost btn-sm"
                                         onClick={() => handleUseHint(level)}
-                                        disabled={hintTokens <= 0 || currentChar.revealedHints.includes(level)}
+                                        disabled={hintTokens <= 0 || hintsDisabled || currentChar.revealedHints.includes(level)}
                                         style={{
                                             flex: 1,
                                             fontSize: 'var(--font-xs)',
-                                            opacity: currentChar.revealedHints.includes(level) ? 0.4 : 1,
+                                            opacity: (hintsDisabled || currentChar.revealedHints.includes(level)) ? 0.4 : 1,
                                         }}
                                     >
                                         💡 {level}
                                     </button>
                                 ))}
-                                <span className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)', alignSelf: 'center', marginLeft: 4 }}>
-                                    ({hintTokens})
+                                <span
+                                    className="text-mono"
+                                    style={{
+                                        fontSize: 'var(--font-xs)',
+                                        marginLeft: 4,
+                                        color: hintsDisabled ? 'var(--neon-danger)' : 'var(--text-muted)',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {hintsUsedTotal}/{maxHints}
                                 </span>
                             </div>
 
@@ -541,7 +599,7 @@ export default function PlayPage() {
             )}
 
             {/* Powerup Toolbar */}
-            {powerups.length > 0 && !allCompleted && (
+            {powerupsEnabled && powerups.length > 0 && !allCompleted && (
                 <div style={{ marginTop: 'var(--space-4)' }}>
                     <p className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)', marginBottom: 'var(--space-2)' }}>POWERUPS</p>
                     <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
@@ -550,24 +608,7 @@ export default function PlayPage() {
                                 key={p.id}
                                 className="card"
                                 disabled={p.is_used}
-                                onClick={async () => {
-                                    if (p.is_used || !teamId) return
-                                    const res = await fetch('/api/powerups/use', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ team_id: teamId, powerup_id: p.powerup_id }),
-                                    })
-                                    const data = await res.json()
-                                    if (res.ok) {
-                                        setPowerups((prev) => prev.map((pp) => pp.id === p.id ? { ...pp, is_used: true } : pp))
-                                        setPowerupFeedback(`${p.icon} ${data.message || p.name + ' activated!'}`)
-                                        setTimeout(() => setPowerupFeedback(''), 3000)
-                                        loadGameState()
-                                    } else {
-                                        setPowerupFeedback(data.error || 'Failed')
-                                        setTimeout(() => setPowerupFeedback(''), 3000)
-                                    }
-                                }}
+                                onClick={() => handleUsePowerup(p)}
                                 style={{
                                     padding: 'var(--space-2) var(--space-3)',
                                     cursor: p.is_used ? 'not-allowed' : 'pointer',
@@ -598,7 +639,7 @@ export default function PlayPage() {
 
             {/* Stats footer */}
             <div className="text-center text-muted text-mono" style={{ fontSize: 'var(--font-xs)', marginTop: 'var(--space-4)' }}>
-                {teamName} • Hints used: {hintsUsedTotal}
+                {teamName} • Hints: {hintsUsedTotal}/{maxHints} used
             </div>
         </main>
     )

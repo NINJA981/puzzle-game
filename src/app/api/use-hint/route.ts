@@ -45,6 +45,17 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No active puzzle' }, { status: 404 })
         }
 
+        // Enforce per-round hint limit
+        const maxHints = puzzle.max_hints ?? 3
+        const hintsUsedThisRound = team.hints_used_total || 0
+
+        if (hintsUsedThisRound >= maxHints) {
+            return NextResponse.json(
+                { success: false, error: `Hint limit reached for this round (${maxHints} max)` },
+                { status: 403 }
+            )
+        }
+
         // Get clue for the specified position (or current index for backward compat)
         const charPos = character_position !== undefined ? character_position : team.current_character_index
 
@@ -66,11 +77,12 @@ export async function POST(request: NextRequest) {
         else if (level === 3) hintText = clue.hint_3 || 'No level 3 hint available.'
 
         // Deduct token and track usage
+        const newHintsUsed = hintsUsedThisRound + 1
         await supabase
             .from('teams')
             .update({
                 hint_tokens: team.hint_tokens - 1,
-                hints_used_total: (team.hints_used_total || 0) + 1,
+                hints_used_total: newHintsUsed,
             })
             .eq('id', team_id)
 
@@ -79,6 +91,8 @@ export async function POST(request: NextRequest) {
             hint_text: hintText,
             hint_level: level,
             tokens_remaining: team.hint_tokens - 1,
+            hints_used_this_round: newHintsUsed,
+            max_hints: maxHints,
         })
     } catch {
         return NextResponse.json({ error: 'Server error' }, { status: 500 })

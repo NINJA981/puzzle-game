@@ -61,10 +61,14 @@ describe('Types', () => {
                 is_live: false,
                 is_active: false,
                 time_limit_seconds: 300,
+                max_powerups: 3,
+                max_hints: 3,
                 session_id: null,
                 created_at: '2026-01-01',
             }
             expect(puzzle.time_limit_seconds).toBe(300)
+            expect(puzzle.max_powerups).toBe(3)
+            expect(puzzle.max_hints).toBe(3)
         })
     })
 
