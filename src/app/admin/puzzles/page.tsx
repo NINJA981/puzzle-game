@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 interface ClueInput {
     character_position: number
@@ -28,6 +28,7 @@ interface PuzzleData {
 
 export default function PuzzlesPage() {
     const [puzzles, setPuzzles] = useState<PuzzleData[]>([])
+    const [editingId, setEditingId] = useState<string | null>(null)
     const [roundNumber, setRoundNumber] = useState('1')
     const [roundName, setRoundName] = useState('')
     const [masterPassword, setMasterPassword] = useState('')
@@ -36,6 +37,7 @@ export default function PuzzlesPage() {
     const [maxHints, setMaxHints] = useState('3')
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState('')
+    const formRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => { fetchPuzzles() }, [])
 
@@ -59,12 +61,52 @@ export default function PuzzlesPage() {
             lockout_duration_seconds: clues[i]?.lockout_duration_seconds || 30,
         }))
         setClues(newClues)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [masterPassword])
 
     function updateClue(index: number, field: keyof ClueInput, value: string | number) {
         const updated = [...clues]
         updated[index] = { ...updated[index], [field]: value }
         setClues(updated)
+    }
+
+    function resetForm() {
+        setEditingId(null)
+        setRoundNumber('1')
+        setRoundName('')
+        setMasterPassword('')
+        setClues([])
+        setMaxPowerups('3')
+        setMaxHints('3')
+        setMessage('')
+    }
+
+    function handleEditPuzzle(puzzle: PuzzleData) {
+        setEditingId(puzzle.id)
+        setRoundNumber(String(puzzle.round_number))
+        setRoundName(puzzle.round_name)
+        setMasterPassword(puzzle.master_password)
+        setMaxPowerups(String(puzzle.max_powerups ?? 3))
+        setMaxHints(String(puzzle.max_hints ?? 3))
+
+        // Load existing clues
+        if (puzzle.clues && puzzle.clues.length > 0) {
+            const sorted = [...puzzle.clues].sort((a, b) => a.character_position - b.character_position)
+            setClues(sorted.map((c) => ({
+                character_position: c.character_position,
+                clue_text: c.clue_text || '',
+                hint_1: c.hint_1 || '',
+                hint_2: c.hint_2 || '',
+                hint_3: c.hint_3 || '',
+                image_url: c.image_url || '',
+                expected_answer: c.expected_answer || '',
+                max_tries: c.max_tries || 3,
+                lockout_duration_seconds: c.lockout_duration_seconds || 30,
+            })))
+        }
+
+        // Scroll to form
+        setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     }
 
     async function handleSavePuzzle() {
@@ -75,33 +117,34 @@ export default function PuzzlesPage() {
         setSaving(true)
         setMessage('')
 
+        const isEdit = !!editingId
+        const method = isEdit ? 'PUT' : 'POST'
+        const body: Record<string, unknown> = {
+            round_number: parseInt(roundNumber),
+            round_name: roundName,
+            master_password: masterPassword.toUpperCase(),
+            max_powerups: parseInt(maxPowerups) || 3,
+            max_hints: parseInt(maxHints) || 3,
+            clues: clues.map((c) => ({
+                ...c,
+                expected_answer: c.expected_answer.toUpperCase(),
+            })),
+        }
+        if (isEdit) body.puzzle_id = editingId
+
         try {
             const res = await fetch('/api/admin/puzzles', {
-                method: 'POST',
+                method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    round_number: parseInt(roundNumber),
-                    round_name: roundName,
-                    master_password: masterPassword.toUpperCase(),
-                    max_powerups: parseInt(maxPowerups) || 3,
-                    max_hints: parseInt(maxHints) || 3,
-                    clues: clues.map((c) => ({
-                        ...c,
-                        expected_answer: c.expected_answer.toUpperCase(),
-                    })),
-                }),
+                body: JSON.stringify(body),
             })
             if (res.ok) {
-                setMessage('✅ Puzzle created!')
-                setRoundName('')
-                setMasterPassword('')
-                setClues([])
-                setMaxPowerups('3')
-                setMaxHints('3')
+                setMessage(isEdit ? '✅ Puzzle updated!' : '✅ Puzzle created!')
+                resetForm()
                 fetchPuzzles()
             } else {
                 const data = await res.json()
-                setMessage(`❌ ${data.error || 'Failed to create puzzle'}`)
+                setMessage(`❌ ${data.error || 'Failed to save puzzle'}`)
             }
         } catch {
             setMessage('❌ Server error')
@@ -125,8 +168,13 @@ export default function PuzzlesPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ puzzle_id: puzzleId }),
         })
-        if (res.ok) fetchPuzzles()
+        if (res.ok) {
+            if (editingId === puzzleId) resetForm()
+            fetchPuzzles()
+        }
     }
+
+    const isEditing = !!editingId
 
     return (
         <div>
@@ -134,11 +182,18 @@ export default function PuzzlesPage() {
                 Puzzles
             </h1>
 
-            {/* Puzzle Creator */}
-            <div className="card card-glow" style={{ marginBottom: 'var(--space-6)' }}>
-                <h2 style={{ fontSize: 'var(--font-lg)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>
-                    Puzzle Creator
-                </h2>
+            {/* Puzzle Creator / Editor */}
+            <div ref={formRef} className="card card-glow" style={{ marginBottom: 'var(--space-6)', border: isEditing ? '1px solid var(--neon-warning)' : undefined }}>
+                <div className="flex-between" style={{ marginBottom: 'var(--space-4)' }}>
+                    <h2 style={{ fontSize: 'var(--font-lg)', fontWeight: 600 }}>
+                        {isEditing ? '✏️ Edit Puzzle' : 'Puzzle Creator'}
+                    </h2>
+                    {isEditing && (
+                        <button className="btn btn-ghost btn-sm" onClick={resetForm}>
+                            ✕ Cancel Edit
+                        </button>
+                    )}
+                </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 2fr', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
                     <div>
@@ -249,12 +304,12 @@ export default function PuzzlesPage() {
                 )}
 
                 <button
-                    className="btn btn-primary"
+                    className={`btn ${isEditing ? 'btn-secondary' : 'btn-primary'}`}
                     onClick={handleSavePuzzle}
                     disabled={saving || !masterPassword || !roundName}
                     style={{ width: '100%' }}
                 >
-                    {saving ? 'SAVING...' : 'CREATE PUZZLE'}
+                    {saving ? 'SAVING...' : isEditing ? '💾 UPDATE PUZZLE' : 'CREATE PUZZLE'}
                 </button>
             </div>
 
@@ -264,18 +319,22 @@ export default function PuzzlesPage() {
             </h2>
 
             {puzzles.map((puzzle) => (
-                <div key={puzzle.id} className="card" style={{ marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+                <div key={puzzle.id} className="card" style={{ marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)', border: editingId === puzzle.id ? '1px solid var(--neon-warning)' : undefined }}>
                     <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
                             <span style={{ fontWeight: 600 }}>{puzzle.round_name}</span>
                             {puzzle.is_active && <span className="badge badge-success" style={{ fontSize: 'var(--font-xs)' }}>ACTIVE</span>}
                             {puzzle.is_live && <span className="badge badge-warning" style={{ fontSize: 'var(--font-xs)' }}>LIVE</span>}
+                            {editingId === puzzle.id && <span className="badge badge-warning" style={{ fontSize: 'var(--font-xs)' }}>EDITING</span>}
                         </div>
                         <p className="text-mono text-muted" style={{ fontSize: 'var(--font-xs)' }}>
                             Round #{puzzle.round_number} • {puzzle.master_password.length} letters • {puzzle.clues?.length || 0} clues • ⚡{puzzle.max_powerups ?? 3} / 💡{puzzle.max_hints ?? 3}
                         </p>
                     </div>
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleEditPuzzle(puzzle)} title="Edit puzzle">
+                            ✏️ EDIT
+                        </button>
                         {!puzzle.is_active && (
                             <button className="btn btn-secondary btn-sm" onClick={() => handleSetActive(puzzle.id)}>
                                 SET ACTIVE

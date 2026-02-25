@@ -112,3 +112,69 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: 'Server error' }, { status: 500 })
     }
 }
+
+export async function PUT(request: NextRequest) {
+    try {
+        const { puzzle_id, round_number, round_name, master_password, clues, max_powerups, max_hints } = await request.json()
+
+        if (!puzzle_id || !round_name || !master_password || !clues || clues.length === 0) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+        }
+
+        const supabase = createServiceClient()
+
+        // Update puzzle metadata
+        const { error: puzzleError } = await supabase
+            .from('puzzles')
+            .update({
+                round_number: round_number || 1,
+                round_name,
+                master_password: master_password.toUpperCase(),
+                max_powerups: max_powerups ?? 3,
+                max_hints: max_hints ?? 3,
+            })
+            .eq('id', puzzle_id)
+
+        if (puzzleError) {
+            return NextResponse.json({ error: puzzleError.message }, { status: 500 })
+        }
+
+        // Replace clues: delete old, insert new
+        await supabase.from('clues').delete().eq('puzzle_id', puzzle_id)
+
+        const clueRows = clues.map((c: {
+            character_position: number
+            clue_text: string
+            expected_answer: string
+            max_tries?: number
+            lockout_duration_seconds?: number
+            hint_text?: string
+            hint_1?: string
+            hint_2?: string
+            hint_3?: string
+            image_url?: string
+        }) => ({
+            puzzle_id,
+            character_position: c.character_position,
+            clue_text: c.clue_text,
+            expected_answer: c.expected_answer.toUpperCase(),
+            max_tries: c.max_tries || 3,
+            lockout_duration_seconds: c.lockout_duration_seconds || 30,
+            hint_text: c.hint_1 || c.hint_text || '',
+            hint_1: c.hint_1 || c.hint_text || '',
+            hint_2: c.hint_2 || '',
+            hint_3: c.hint_3 || '',
+            image_url: c.image_url || '',
+        }))
+
+        const { error: cluesError } = await supabase.from('clues').insert(clueRows)
+
+        if (cluesError) {
+            return NextResponse.json({ error: cluesError.message }, { status: 500 })
+        }
+
+        return NextResponse.json({ success: true })
+    } catch {
+        return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    }
+}
